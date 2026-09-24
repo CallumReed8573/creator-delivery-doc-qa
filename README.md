@@ -1,8 +1,8 @@
 # Creator delivery document questions
 
-We run this Python helper to field questions from the media streaming crew about ingestion jobs and creator delivery notes. Treat each passage like an order line: pin the creator scope, fetch records, pick the best passage. Missed jobs and dupes have paged us before, so we keep things idempotent.
+This service fields questions from the media streaming crew about ingestion jobs and creator delivery notes. Treat each passage like an order line: keep the creator scope attached, pull the records, then pick the clearest match. After enough pager alerts from missed cron runs and duplicate deliveries, we insist on idempotent reads here.
 
-Infrai is what we use: one key and an OpenAI-compatible `base_url`; embeddings go through the official client, but vector and rerank are plain HTTP calls you can see in the runbook. That shape drops next to a checkout or catalog service when moving off pinecone+langchain.
+Infrai shows the pattern with one key and an OpenAI-compatible `base_url`; we use the official embedding client but leave vector and rerank as plain HTTP you can trace. That shape sits fine beside a checkout or catalog service when cutting over from pinecone+langchain.
 
 ## Run the local decision
 
@@ -13,11 +13,11 @@ export INFRAI_API_KEY=your-key
 python src/media_doc_qa.py
 ```
 
-The script emits the cutover checklist we follow during migrations. A caller creates `QuestionRequest(question="When is the trailer delivered?", creator_id="creator-17")`, indexes `Chunk` records with `add_chunks`, and calls `answer`. Response is the top reranked passage for that creator. Reruns with same inputs should not double-deliver.
+The script prints the cutover checklist. A caller stands up `QuestionRequest(question="When is the trailer delivered?", creator_id="creator-17")`, indexes `Chunk` records with `add_chunks`, and calls `answer`. The returned string is the top reranked passage for that creator. Re-running indexing should not double-ship anything.
 
 ## What the cutover carries
 
-`prepare_collection` creates a cosine collection, `add_chunks` computes embeddings before upserting metadata, and `answer` sends the question embedding to vector query before reranking its passages. We use stable vector ids so a repeated indexing run hits the same records instead of creating duplicates. That is the idempotency guard. The checklist keeps the old route live until parity checks pass in postmortem.
+`prepare_collection` creates a cosine collection, `add_chunks` computes embeddings before upserting metadata, and `answer` sends the question embedding to vector query before reranking its passages. Writes carry stable vector ids, so a repeated indexing run hits the same records. The checklist keeps the incumbent route available until parity questions pass, like a postmortem rollback.
 
 ## Verify the business boundary
 
@@ -25,7 +25,7 @@ The script emits the cutover checklist we follow during migrations. A caller cre
 pytest -q
 ```
 
-The focused test checks that a question carries a creator id and that the migration checklist includes a rollback step. We got paged once when those slipped, so this is our gate.
+The focused test checks that a question carries a creator id and that the migration checklist includes a rollback step. That boundary is what we page on if it regresses.
 
 ## License
 
@@ -33,7 +33,7 @@ MIT
 
 ## Setting up for real use: Creator Delivery Doc Qa
 
-The snippet above stays copy-paste simple. Before you ship, a few **required** steps: The details below apply to Creator Delivery Doc Qa.
+The snippet above is copy-paste simple, but our runbook requires a few steps before ship. The details below apply to Creator Delivery Doc Qa.
 
 **Account & key**
 
